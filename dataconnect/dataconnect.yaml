@@ -1,0 +1,12 @@
+specVersion: "v1beta"
+serviceId: "gtmbuilder"
+location: "northamerica-northeast2"
+schema:
+  source: "./schema"
+  datasource:
+    postgresql:
+      database: "gtmb_db"
+      cloudSql:
+        instanceId: "gtmbuilder"
+      # schemaValidation: "COMPATIBLE"
+connectorDirs: ["./connector"]

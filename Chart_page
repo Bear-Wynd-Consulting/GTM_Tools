@@ -1,0 +1,725 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+async function authenticateUser() {
+    try {
+        if (initialAuthToken) {
+            await signInWithCustomToken(auth, initialAuthToken);
+        } else {
+            await signInAnonymously(auth);
+        }
+    } catch (error) {
+        console.error("Firebase authentication error:", error);
+        // Display error message to user
+    }
+}
+
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        currentUserId = user.uid;
+        userIdDisplay.textContent = `User ID: ${currentUserId}`;
+        isAuthReady = true;
+        loadUserStrategy(); // Load data once authenticated
+    } else {
+        currentUserId = null;
+        userIdDisplay.textContent = 'User ID: Not authenticated';
+        isAuthReady = false;
+        renderChart(initialData); // Use initial data if not authenticated
+    }
+});
+
+saveStrategyBtn.addEventListener('click', async () => {
+    if (!isAuthReady || !currentUserId) { /* ... handle not ready ... */ return; }
+    try {
+        const strategyDocRef = doc(db, `artifacts/<span class="math-inline">\{appId\}/users/</span>{currentUserId}/user_strategies`, 'my_strategy');
+        await setDoc(strategyDocRef, currentChartData);
+        // ... show success message ...
+    } catch (error) {
+        // ... show error message ...
+    }
+});
+
+function loadUserStrategy() {
+    if (!isAuthReady || !currentUserId) { /* ... handle not ready ... */ return; }
+    const strategyDocRef = doc(db, `artifacts/<span class="math-inline">\{appId\}/users/</span>{currentUserId}/user_strategies`, 'my_strategy');
+    onSnapshot(strategyDocRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const loadedData = docSnap.data();
+            renderChart(loadedData);
+            // ... update textarea and show success message ...
+        } else {
+            renderChart(initialData);
+            // ... update textarea and show "no saved data" message ...
+        }
+    }, (error) => {
+        // ... show error message ...
+    });
+}
+
+const tacticGoalPromptInput = document.getElementById('tacticGoalPrompt');
+const suggestTacticGoalBtn = document.getElementById('suggestTacticGoalBtn');
+const tacticGoalResponseDiv = document.getElementById('tacticGoalResponse');
+const tacticGoalLoader = document.getElementById('tacticGoalLoader');
+
+const kpiGoalNameInput = document.getElementById('kpiGoalName');
+const generateKpiIdeasBtn = document.getElementById('generateKpiIdeasBtn');
+const kpiIdeasResponseDiv = document.getElementById('kpiIdeasResponse');
+const kpiIdeasLoader = document.getElementById('kpiIdeasLoader');
+
+async function callGeminiAPI(prompt) {
+    let chatHistory = [];
+    chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+    const payload = { contents: chatHistory };
+    const apiKey = ""; // Canvas will provide this at runtime
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+    try {
+        const response = await fetch(apiUrl, { /* ... */ });
+        const result = await response.json();
+        // ... extract text from result ...
+    } catch (error) {
+        // ... handle error ...
+    }
+}
+
+suggestTacticGoalBtn.addEventListener('click', async () => {
+    // ... validation, show loader ...
+    const currentStrategyJson = JSON.stringify(currentChartData, null, 2); // Provide context
+    const prompt = `Given the following community strategy structure:\n\n${currentStrategyJson}\n\n${userPrompt}. Please suggest a new tactic or goal...`;
+    const response = await callGeminiAPI(prompt);
+    // ... hide loader, display response ...
+});
+
+generateKpiIdeasBtn.addEventListener('click', async () => {
+    // ... validation, find goal KPI in currentChartData ...
+    const prompt = `The goal "${goalName}" currently has a KPI of ${foundKpi}. Please provide 3-5 actionable ideas...`;
+    const response = await callGeminiAPI(prompt);
+    // ... hide loader, display response ...
+});
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Circular Graph</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Basic styling for the body to center the content */
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column; /* Arrange items vertically */
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f4f8; /* Light gray background */
+            margin: 0;
+            padding: 1rem; /* Add some padding around the content */
+            box-sizing: border-box;
+            overflow-y: auto; /* Allow vertical scrolling if content exceeds viewport */
+        }
+        /* Main container for the app, to hold chart and LLM features */
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem; /* Space between sections */
+            width: 100%;
+            max-width: 1000px; /* Max width for the entire app */
+            background-color: #ffffff;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+        /* Container for the chart, applying Tailwind classes for styling */
+        .chart-container {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            max-width: 900px; /* Max width for larger screens */
+            aspect-ratio: 1 / 1; /* Maintain a square aspect ratio for the chart */
+            /* Removed background-color and box-shadow here as they are on app-container */
+            padding: 0; /* No padding here, handled by app-container */
+            box-sizing: border-box;
+        }
+        /* Tooltip for displaying information on hover */
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            padding: 0.5rem 1rem;
+            background: rgba(0, 0, 0, 0.8); /* Semi-transparent dark background */
+            color: white;
+            border-radius: 0.5rem; /* rounded-md */
+            pointer-events: none; /* Allows clicks to pass through to elements beneath */
+            opacity: 0; /* Hidden by default */
+            transition: opacity 0.2s; /* Smooth fade in/out */
+            font-size: 0.875rem; /* text-sm */
+            z-index: 100; /* Ensure tooltip is on top */
+        }
+        /* Styles for labels within the sunburst segments */
+        .node-label {
+            font-size: 0.75rem; /* text-xs */
+            fill: #374151; /* text-gray-700 */
+            pointer-events: none; /* Allows clicks to pass through */
+            text-anchor: middle; /* Center the text horizontally */
+        }
+        /* Styles for the central text label */
+        .center-label {
+            font-size: 1.25rem; /* text-xl */
+            font-weight: 700; /* font-bold */
+            fill: #1f2937; /* text-gray-900 */
+            text-anchor: middle; /* Center the text horizontally */
+        }
+        /* Styling for the loading spinner */
+        .loader {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #3498db; /* Blue */
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: none; /* Hidden by default */
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="app-container">
+        <h1 class="text-3xl font-bold text-gray-800 mb-4">Community Strategy Overview</h1>
+        <p id="userIdDisplay" class="text-sm text-gray-500 mb-4">User ID: Loading...</p>
+        <div id="chart-container" class="chart-container"></div>
+
+        <div class="data-input-section mt-8 w-full max-w-2xl bg-purple-50 p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-semibold text-purple-800 mb-4">📊 Dynamic Data Input</h2>
+            <p class="text-gray-600 mb-4">Edit the JSON below to update the chart. Ensure tactic weights sum to 100%.</p>
+            <textarea id="dataInput" rows="15"
+                      class="w-full p-3 border border-purple-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent mb-3 font-mono text-sm"></textarea>
+            <div class="flex gap-4 mb-3">
+                <button id="updateChartBtn"
+                        class="flex-1 bg-purple-600 text-white py-3 px-4 rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 transition duration-150 ease-in-out">
+                    Update Chart
+                </button>
+                <button id="saveStrategyBtn"
+                        class="flex-1 bg-indigo-600 text-white py-3 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition duration-150 ease-in-out">
+                    Save Strategy
+                </button>
+            </div>
+            <div id="dataInputMessage" class="mt-4 p-3 bg-red-100 border border-red-200 rounded-md text-red-800 hidden"></div>
+            <div id="saveLoadMessage" class="mt-2 p-3 bg-gray-100 border border-gray-200 rounded-md text-gray-700 hidden"></div>
+        </div>
+
+        <div class="llm-features mt-8 w-full max-w-2xl">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4">AI-Powered Insights</h2>
+
+            <div class="bg-blue-50 p-6 rounded-lg shadow-md mb-6">
+                <h3 class="text-xl font-medium text-blue-800 mb-3">✨ Suggest New Tactic or Goal</h3>
+                <p class="text-gray-600 mb-4">Get AI suggestions for new tactics or specific goals based on your strategy.</p>
+                <input type="text" id="tacticGoalPrompt" placeholder="e.g., new tactic for community growth"
+                       class="w-full p-3 border border-blue-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-3">
+                <button id="suggestTacticGoalBtn"
+                        class="w-full bg-blue-600 text-white py-3 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-150 ease-in-out">
+                    ✨ Suggest Tactic/Goal
+                </button>
+                <div id="tacticGoalResponse" class="mt-4 p-3 bg-blue-100 border border-blue-200 rounded-md text-gray-800 hidden"></div>
+                <div id="tacticGoalLoader" class="loader mx-auto mt-4"></div>
+            </div>
+
+            <div class="bg-green-50 p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-medium text-green-800 mb-3">✨ Generate KPI Improvement Ideas</h3>
+                <p class="text-gray-600 mb-4">Enter a goal name to get AI-generated ideas on how to improve its KPI.</p>
+                <input type="text" id="kpiGoalName" placeholder="e.g., UX Enhancement"
+                       class="w-full p-3 border border-green-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent mb-3">
+                <button id="generateKpiIdeasBtn"
+                        class="w-full bg-green-600 text-white py-3 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition duration-150 ease-in-out">
+                    ✨ Generate KPI Ideas
+                </button>
+                <div id="kpiIdeasResponse" class="mt-4 p-3 bg-green-100 border border-green-200 rounded-md text-gray-800 hidden"></div>
+                <div id="kpiIdeasLoader" class="loader mx-auto mt-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Firebase imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase global variables (provided by the Canvas environment)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        let currentUserId = null;
+        let isAuthReady = false; // Flag to ensure Firestore operations wait for auth
+
+        // Get UI elements for Firebase status
+        const userIdDisplay = document.getElementById('userIdDisplay');
+        const saveLoadMessageDiv = document.getElementById('saveLoadMessage');
+
+        /**
+         * Authenticates the user. Tries custom token first, then anonymous.
+         */
+        async function authenticateUser() {
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Firebase authentication error:", error);
+                saveLoadMessageDiv.classList.remove('hidden');
+                saveLoadMessageDiv.textContent = `Authentication failed: ${error.message}`;
+            }
+        }
+
+        // Listen for authentication state changes
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUserId = user.uid;
+                userIdDisplay.textContent = `User ID: ${currentUserId}`;
+                isAuthReady = true;
+                console.log("User authenticated:", currentUserId);
+                // Once authenticated, attempt to load the saved strategy
+                loadUserStrategy();
+            } else {
+                currentUserId = null;
+                userIdDisplay.textContent = 'User ID: Not authenticated';
+                isAuthReady = false;
+                console.log("User not authenticated.");
+                // If not authenticated, render initial data
+                renderChart(initialData);
+            }
+        });
+
+        // Set up the initial dimensions for the SVG container.
+        const initialWidth = 800;
+        const initialHeight = 800;
+        let currentRadius = Math.min(initialWidth, initialHeight) / 2;
+
+        const svg = d3.select("#chart-container")
+            .append("svg")
+            .attr("viewBox", `0 0 ${initialWidth} ${initialHeight}`)
+            .attr("preserveAspectRatio", "xMidYMid meet")
+            .append("g")
+            .attr("transform", `translate(${initialWidth / 2},${initialHeight / 2})`);
+
+        const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+        const arc = d3.arc()
+            .startAngle(d => d.x0)
+            .endAngle(d => d.x1)
+            .padAngle(d => Math.min((d.x1 - d.x0) / 2, 0.005))
+            .padRadius(currentRadius / 2)
+            .innerRadius(d => d.y0)
+            .outerRadius(d => d.y1 - 1);
+
+        const partition = d3.partition()
+            .size([2 * Math.PI, currentRadius]);
+
+        const tooltip = d3.select("body").append("div")
+            .attr("class", "tooltip");
+
+        function assignValues(node) {
+            if (node.children) {
+                if (node.name === "Community Strategy") {
+                    node.value = node.children.reduce((acc, child) => acc + (child.weight || 0), 0);
+                } else {
+                    node.value = node.weight;
+                }
+                node.children.forEach(assignValues);
+            } else {
+                node.value = node.kpi;
+            }
+        }
+
+        let currentChartData = {}; // Store the currently rendered data
+        function renderChart(data) {
+            currentChartData = data; // Update the global current data
+            dataInputTextArea.value = JSON.stringify(currentChartData, null, 2); // Update textarea
+
+            svg.selectAll("*").remove();
+
+            const processedData = JSON.parse(JSON.stringify(data));
+            assignValues(processedData);
+
+            const rootHierarchy = d3.hierarchy(processedData)
+                .sum(d => d.value)
+                .sort((a, b) => b.value - a.value);
+
+            const nodes = partition(rootHierarchy).descendants();
+
+            const arcs = nodes.filter(d => d.depth);
+
+            svg.selectAll("path")
+                .data(arcs)
+                .enter().append("path")
+                .attr("d", arc)
+                .attr("fill", d => {
+                    if (d.depth === 1) return color(d.data.name);
+                    if (d.depth === 2) return d3.color(color(d.parent.data.name)).brighter(0.5);
+                    return "white";
+                })
+                .attr("stroke", "#fff")
+                .attr("stroke-width", 1)
+                .on("mouseover", function(event, d) {
+                    tooltip.style("opacity", 1)
+                        .html(`<strong>${d.data.name}</strong><br>
+                              ${d.depth === 1 ? `Weight: ${d.data.weight}%` : `KPI: ${d.data.kpi}`}`)
+                        .style("left", (event.pageX + 10) + "px")
+                        .style("top", (event.pageY - 28) + "px");
+                })
+                .on("mouseout", function() {
+                    tooltip.style("opacity", 0);
+                });
+
+            svg.selectAll(".node-label")
+                .data(arcs)
+                .enter().append("text")
+                .attr("class", "node-label")
+                .attr("transform", function(d) {
+                    const x = (d.x0 + d.x1) / 2 * 180 / Math.PI;
+                    const y = (d.y0 + d.y1) / 2;
+                    return `rotate(${x - 90}) translate(${y},0) rotate(${x > 90 ? -180 : 0})`;
+                })
+                .attr("dy", "0.35em")
+                .text(d => d.data.name)
+                .style("fill-opacity", function(d) {
+                    return arc.centroid(d)[0] > 10 ? 1 : 0;
+                });
+
+            svg.append("text")
+                .attr("class", "center-label")
+                .attr("text-anchor", "middle")
+                .attr("dy", "0.35em")
+                .text(data.name);
+        }
+
+        const initialData = {
+            name: "Community Strategy",
+            children: [
+                {
+                    name: "Product Feedback",
+                    weight: 20,
+                    children: [{ name: "UX Enhancement", kpi: 75 }],
+                },
+                {
+                    name: "Industry Demonstrations",
+                    weight: 30,
+                    children: [{ name: "Align to Prospects", kpi: 60 }],
+                },
+                {
+                    name: "Developer Enablement",
+                    weight: 10,
+                    children: [{ name: "Identify Partners", kpi: 90 }],
+                },
+                {
+                    name: "Customer Satisfaction",
+                    weight: 40,
+                    children: [{ name: "Reduce Tier One Support", kpi: 85 }],
+                },
+            ],
+        };
+
+        const dataInputTextArea = document.getElementById('dataInput');
+        const updateChartButton = document.getElementById('updateChartBtn');
+        const dataInputMessageDiv = document.getElementById('dataInputMessage');
+        const saveStrategyBtn = document.getElementById('saveStrategyBtn');
+
+        // Populate the textarea with the initial data (formatted for readability)
+        dataInputTextArea.value = JSON.stringify(initialData, null, 2);
+
+        // Authenticate user on window load
+        window.onload = function() {
+            authenticateUser();
+        };
+
+        window.addEventListener('resize', () => {
+            const container = document.getElementById('chart-container');
+            const newWidth = container.clientWidth;
+            const newHeight = container.clientHeight;
+            currentRadius = Math.min(newWidth, newHeight) / 2;
+
+            d3.select("svg").attr("viewBox", `0 0 ${newWidth} ${newHeight}`);
+            svg.attr("transform", `translate(${newWidth / 2},${newHeight / 2})`);
+
+            partition.size([2 * Math.PI, currentRadius]);
+            arc.padRadius(currentRadius / 2).outerRadius(d => d.y1 - 1);
+
+            renderChart(currentChartData);
+        });
+
+        updateChartButton.addEventListener('click', () => {
+            const inputJsonString = dataInputTextArea.value;
+            dataInputMessageDiv.classList.add('hidden');
+
+            try {
+                const newData = JSON.parse(inputJsonString);
+
+                if (!newData || typeof newData !== 'object' || !newData.name || !Array.isArray(newData.children)) {
+                    dataInputMessageDiv.classList.remove('hidden');
+                    dataInputMessageDiv.textContent = 'Error: Invalid data structure. Expected an object with "name" and "children" array.';
+                    return;
+                }
+
+                if (newData.name !== "Community Strategy") {
+                    dataInputMessageDiv.classList.remove('hidden');
+                    dataInputMessageDiv.textContent = 'Error: The root node name must be "Community Strategy".';
+                    return;
+                }
+
+                let totalWeight = 0;
+                let hasInvalidTactic = false;
+
+                newData.children.forEach(tactic => {
+                    if (typeof tactic.name !== 'string' || typeof tactic.weight !== 'number' || tactic.weight < 0) {
+                        hasInvalidTactic = true;
+                    }
+                    totalWeight += tactic.weight || 0;
+
+                    if (tactic.children && Array.isArray(tactic.children)) {
+                        tactic.children.forEach(goal => {
+                            if (typeof goal.name !== 'string' || typeof goal.kpi !== 'number' || goal.kpi < 0 || goal.kpi > 100) {
+                                hasInvalidTactic = true;
+                            }
+                        });
+                    } else {
+                         hasInvalidTactic = true;
+                    }
+                });
+
+                if (hasInvalidTactic) {
+                    dataInputMessageDiv.classList.remove('hidden');
+                    dataInputMessageDiv.textContent = 'Error: Each tactic must have a "name" (string), "weight" (number >= 0), and a "children" array with goals. Each goal must have a "name" (string) and "kpi" (number 0-100).';
+                    return;
+                }
+
+                // Using a small tolerance for floating point comparisons
+                if (Math.abs(totalWeight - 100) > 0.001) {
+                    dataInputMessageDiv.classList.remove('hidden');
+                    dataInputMessageDiv.textContent = `Error: Total tactic weight is ${totalWeight}%. It must sum to 100% to complete the circle.`;
+                    return;
+                }
+
+                renderChart(newData);
+                dataInputMessageDiv.classList.add('hidden');
+
+            } catch (error) {
+                dataInputMessageDiv.classList.remove('hidden');
+                dataInputMessageDiv.textContent = `Error parsing JSON: ${error.message}. Please ensure your JSON is valid.`;
+                console.error("JSON parsing error:", error);
+            }
+        });
+
+        // --- Firestore Save/Load Functions ---
+
+        /**
+         * Saves the current chart data to Firestore.
+         */
+        saveStrategyBtn.addEventListener('click', async () => {
+            if (!isAuthReady || !currentUserId) {
+                saveLoadMessageDiv.classList.remove('hidden');
+                saveLoadMessageDiv.textContent = "Please wait for authentication to complete before saving.";
+                return;
+            }
+
+            try {
+                const strategyDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/user_strategies`, 'my_strategy');
+                await setDoc(strategyDocRef, currentChartData);
+                saveLoadMessageDiv.classList.remove('hidden');
+                saveLoadMessageDiv.textContent = "Strategy saved successfully!";
+                saveLoadMessageDiv.style.backgroundColor = '#d1e7dd'; // Greenish for success
+                saveLoadMessageDiv.style.borderColor = '#badbcc';
+                saveLoadMessageDiv.style.color = '#0f5132';
+                setTimeout(() => saveLoadMessageDiv.classList.add('hidden'), 3000); // Hide after 3 seconds
+            } catch (error) {
+                console.error("Error saving strategy:", error);
+                saveLoadMessageDiv.classList.remove('hidden');
+                saveLoadMessageDiv.textContent = `Error saving strategy: ${error.message}`;
+                saveLoadMessageDiv.style.backgroundColor = '#f8d7da'; // Reddish for error
+                saveLoadMessageDiv.style.borderColor = '#f5c2c7';
+                saveLoadMessageDiv.style.color = '#842029';
+            }
+        });
+
+        /**
+         * Loads the user's strategy from Firestore using a real-time listener.
+         */
+        function loadUserStrategy() {
+            if (!isAuthReady || !currentUserId) {
+                console.log("Authentication not ready or user not logged in, cannot load strategy.");
+                return;
+            }
+
+            const strategyDocRef = doc(db, `artifacts/${appId}/users/${currentUserId}/user_strategies`, 'my_strategy');
+
+            onSnapshot(strategyDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const loadedData = docSnap.data();
+                    console.log("Strategy loaded from Firestore:", loadedData);
+                    renderChart(loadedData);
+                    dataInputTextArea.value = JSON.stringify(loadedData, null, 2); // Update textarea with loaded data
+                    saveLoadMessageDiv.classList.remove('hidden');
+                    saveLoadMessageDiv.textContent = "Strategy loaded successfully!";
+                    saveLoadMessageDiv.style.backgroundColor = '#d1e7dd';
+                    saveLoadMessageDiv.style.borderColor = '#badbcc';
+                    saveLoadMessageDiv.style.color = '#0f5132';
+                    setTimeout(() => saveLoadMessageDiv.classList.add('hidden'), 3000);
+                } else {
+                    console.log("No saved strategy found for this user. Using initial data.");
+                    renderChart(initialData);
+                    dataInputTextArea.value = JSON.stringify(initialData, null, 2); // Update textarea with initial data
+                    saveLoadMessageDiv.classList.remove('hidden');
+                    saveLoadMessageDiv.textContent = "No saved strategy found. Displaying initial data.";
+                    saveLoadMessageDiv.style.backgroundColor = '#fff3cd'; // Yellowish for warning
+                    saveLoadMessageDiv.style.borderColor = '#ffecb5';
+                    saveLoadMessageDiv.style.color = '#664d03';
+                    setTimeout(() => saveLoadMessageDiv.classList.add('hidden'), 3000);
+                }
+            }, (error) => {
+                console.error("Error listening to strategy document:", error);
+                saveLoadMessageDiv.classList.remove('hidden');
+                saveLoadMessageDiv.textContent = `Error loading strategy: ${error.message}`;
+                saveLoadMessageDiv.style.backgroundColor = '#f8d7da';
+                saveLoadMessageDiv.style.borderColor = '#f5c2c7';
+                saveLoadMessageDiv.style.color = '#842029';
+            });
+        }
+
+
+        // --- Gemini API Integration ---
+
+        const tacticGoalPromptInput = document.getElementById('tacticGoalPrompt');
+        const suggestTacticGoalBtn = document.getElementById('suggestTacticGoalBtn');
+        const tacticGoalResponseDiv = document.getElementById('tacticGoalResponse');
+        const tacticGoalLoader = document.getElementById('tacticGoalLoader');
+
+        const kpiGoalNameInput = document.getElementById('kpiGoalName');
+        const generateKpiIdeasBtn = document.getElementById('generateKpiIdeasBtn');
+        const kpiIdeasResponseDiv = document.getElementById('kpiIdeasResponse');
+        const kpiIdeasLoader = document.getElementById('kpiIdeasLoader');
+
+        async function callGeminiAPI(prompt) {
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+            const payload = { contents: chatHistory };
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    return result.candidates[0].content.parts[0].text;
+                } else {
+                    console.error("Gemini API response structure unexpected:", result);
+                    return "Error: Could not get a valid response from the AI.";
+                }
+            } catch (error) {
+                console.error("Error calling Gemini API:", error);
+                return "Error: Failed to connect to the AI service.";
+            }
+        }
+
+        suggestTacticGoalBtn.addEventListener('click', async () => {
+            const userPrompt = tacticGoalPromptInput.value.trim();
+            if (!userPrompt) {
+                tacticGoalResponseDiv.classList.remove('hidden');
+                tacticGoalResponseDiv.innerHTML = '<p class="text-red-600">Please enter a prompt for the AI.</p>';
+                return;
+            }
+
+            tacticGoalLoader.style.display = 'block';
+            tacticGoalResponseDiv.classList.add('hidden');
+            tacticGoalResponseDiv.innerHTML = '';
+
+            const currentStrategyJson = JSON.stringify(currentChartData, null, 2);
+            const prompt = `Given the following community strategy structure:\n\n${currentStrategyJson}\n\n${userPrompt}. Please suggest a new tactic or goal that aligns with this strategy. Provide a brief name and a short description. If it's a tactic, suggest a plausible weight (out of 100, assuming other weights might adjust). If it's a goal, suggest a plausible KPI value (0-100). Format your response clearly.`;
+
+            const response = await callGeminiAPI(prompt);
+
+            tacticGoalLoader.style.display = 'none';
+            tacticGoalResponseDiv.classList.remove('hidden');
+            tacticGoalResponseDiv.innerHTML = `<p class="font-semibold mb-2">AI Suggestion:</p><p>${response.replace(/\n/g, '<br>')}</p>`;
+        });
+
+        generateKpiIdeasBtn.addEventListener('click', async () => {
+            const goalName = kpiGoalNameInput.value.trim();
+            if (!goalName) {
+                kpiIdeasResponseDiv.classList.remove('hidden');
+                kpiIdeasResponseDiv.innerHTML = '<p class="text-red-600">Please enter a goal name.</p>';
+                return;
+            }
+
+            let foundKpi = null;
+            let foundGoal = null;
+
+            function findGoalInHierarchy(node, nameToFind) {
+                if (node.name === nameToFind && node.kpi !== undefined) {
+                    return node;
+                }
+                if (node.children) {
+                    for (const child of node.children) {
+                        const result = findGoalInHierarchy(child, nameToFind);
+                        if (result) return result;
+                    }
+                }
+                return null;
+            }
+
+            foundGoal = findGoalInHierarchy(currentChartData, goalName);
+
+            if (foundGoal) {
+                foundKpi = foundGoal.kpi;
+            } else {
+                kpiIdeasResponseDiv.classList.remove('hidden');
+                kpiIdeasResponseDiv.innerHTML = `<p class="text-red-600">Goal "${goalName}" not found in the current strategy data.</p>`;
+                return;
+            }
+
+            kpiIdeasLoader.style.display = 'block';
+            kpiIdeasResponseDiv.classList.add('hidden');
+            kpiIdeasResponseDiv.innerHTML = '';
+
+            const prompt = `The goal "${goalName}" currently has a KPI of ${foundKpi}. Please provide 3-5 actionable ideas to improve this KPI. Be specific and concise.`;
+
+            const response = await callGeminiAPI(prompt);
+
+            kpiIdeasLoader.style.display = 'none';
+            kpiIdeasResponseDiv.classList.remove('hidden');
+            kpiIdeasResponseDiv.innerHTML = `<p class="font-semibold mb-2">AI-Generated Ideas for "${goalName}" (KPI: ${foundKpi}):</p><p>${response.replace(/\n/g, '<br>')}</p>`;
+        });
+    </script>
+</body>
+</html>
