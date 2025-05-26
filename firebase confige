@@ -7,17 +7,13 @@ import { getFirestore, doc, setDoc, onSnapshot } from Firestore;
 // TODO: Add SDKs for Firebase products that you want to use
 // https://firebase.google.com/docs/web/setup#available-libraries
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyASvRYaHxEn_VMOjCLohSVSQEt40u01rt8",
-  authDomain: "utopian-pen-461015-n0.firebaseapp.com",
-  projectId: "utopian-pen-461015-n0",
-  storageBucket: "utopian-pen-461015-n0.firebasestorage.app",
-  messagingSenderId: "960132664833",
-  appId: "1:960132664833:web:2fb1a8c0239960a746ba00",
-  measurementId: "G-X9QRXES09Y"
-};
+Process.env.FIREBASE_API_KEY;
+Process.env.FIREBASE_AUTH_DOMAIN;
+Process.env.FIREBASE_PROJECT_ID;
+Process.env.FIREBASE_STORAGE_BUCKET;
+Process.env.FIREBASE_MESSAGING_SENDER_ID;
+Process.env.FIREBASE_APP_ID;
+Process.env.FIREBASE_MEASUREMENT_ID;
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
